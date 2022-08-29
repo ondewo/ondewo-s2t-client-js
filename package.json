@@ -1,0 +1,31 @@
+{
+	"name": "@ondewo/ondewo-s2t-client-js",
+	"version": "3.3.0",
+	"description": "Ondewo s2t creation and handling client library for js",
+	"keywords": [
+		"ondewo",
+		"s2t",
+		"api",
+		"client",
+		"js",
+		"grpc"
+	],
+	"author": "ONDEWO GmbH",
+	"homepage": "https://ondewo.com/",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"directory": "https://github.com/ondewo/ondewo-s2t-client-js.git"
+	},
+	"dependencies": {
+		"google-protobuf": "3.21.0",
+		"grpc-web": "^1.3.1",
+		"webpack": "^5.74.0"
+	},
+	"devDependencies": {
+		"@typescript-eslint/eslint-plugin": "^5.35.1",
+		"eslint": "^8.23.0",
+		"husky": "^8.0.1",
+		"prettier": "^2.7.1"
+	}
+}
