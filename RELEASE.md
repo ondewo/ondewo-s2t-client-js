@@ -1,4 +1,11 @@
 # Release History
+
+***************** 
+## Release ONDEWO S2T Js Client 3.3.0 
+ 
+### Improvements 
+ * Tracking API Version [3.3.0](https://github.com/ondewo/ondewo-s2t-api/releases/tag/3.3.0) ( [Documentation](https://ondewo.github.io/ondewo-s2t-api/) ) 
+
 *****************
 
 ## Release ONDEWO S2T Js Client 3.3.0
