@@ -1,6 +1,6 @@
 {
 	"name": "@ondewo/ondewo-s2t-client-js",
-	"version": "3.3.0",
+	"version": "4.0.0",
 	"description": "Ondewo s2t creation and handling client library for js",
 	"keywords": [
 		"ondewo",
