@@ -8,6 +8,13 @@
 
 
 ***************** 
+## Release ONDEWO S2T Js Client 7.2.0 
+ 
+### Improvements 
+ * Tracking API Version [7.2.0](https://github.com/ondewo/ondewo-s2t-api/releases/tag/7.2.0) ( [Documentation](https://ondewo.github.io/ondewo-s2t-api/) ) 
+
+
+***************** 
 ## Release ONDEWO S2T Js Client 7.1.0 
  
 ### Improvements 
