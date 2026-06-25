@@ -24,6 +24,46 @@ const assert = require('node:assert/strict');
 
 const { login, OfflineTokenProvider, TokenError } = require('./offlineTokenProvider');
 
+/**
+ * A scripted response for {@link makeFetchStub}. `body` is sent verbatim when a string (to exercise the
+ * non-JSON path) or JSON-stringified when an object; `status` defaults to 200.
+ *
+ * @typedef {object} StubResponse
+ * @property {object | string} body
+ *   The response body: an object is JSON-stringified, a string is returned as-is.
+ * @property {number} [status]
+ *   The HTTP status code to report; defaults to 200.
+ */
+
+/**
+ * A single request captured by {@link makeFetchStub}, exposing the URL, the raw init, and the parsed
+ * form-encoded body so assertions can inspect what was sent on the wire.
+ *
+ * @typedef {object} CapturedCall
+ * @property {string} url
+ *   The token endpoint URL the stub was called with.
+ * @property {RequestInit} init
+ *   The request init (method, headers, body) passed to the stub.
+ * @property {URLSearchParams} params
+ *   The form-encoded request body, parsed for field-level assertions.
+ */
+
+/**
+ * The injectable stub returned by {@link makeFetchStub}: a `fetchImpl` to pass as the `fetchImpl`
+ * option, plus the live array of captured calls.
+ *
+ * @typedef {object} FetchStub
+ * @property {(url: string, init: RequestInit) => Promise<{ ok: boolean, status: number, text: () => Promise<string> }>} fetchImpl
+ *   The fake fetch to inject; resolves to the next scripted {@link StubResponse}.
+ * @property {CapturedCall[]} calls
+ *   The requests the stub has received so far, in call order.
+ */
+
+/**
+ * Shared base login options for the public SDK client; spread per test and overridden as needed.
+ *
+ * @type {{ keycloakUrl: string, realm: string, clientId: string, username: string, password: string }}
+ */
 const BASE_OPTIONS = {
 	keycloakUrl: 'https://auth.example.com/auth',
 	realm: 'ondewo-ccai-platform',
@@ -32,12 +72,26 @@ const BASE_OPTIONS = {
 	password: 'super-secret'
 };
 
+/**
+ * The token endpoint URL expected for {@link BASE_OPTIONS} (used to assert URL construction).
+ *
+ * @type {string}
+ */
 const EXPECTED_TOKEN_ENDPOINT =
 	'https://auth.example.com/auth/realms/ondewo-ccai-platform/protocol/openid-connect/token';
 
-// Build a fake fetch that returns a sequence of JSON responses (one per call) and records the
-// requests it received, so assertions can inspect the form-encoded body and the URL.
+/**
+ * Build a fake fetch that returns a sequence of JSON responses (one per call) and records the requests
+ * it received, so assertions can inspect the form-encoded body and the URL. Throws if called more times
+ * than there are scripted responses.
+ *
+ * @param {StubResponse[]} responses
+ *   The scripted responses, consumed one per call in order.
+ * @returns {FetchStub}
+ *   The injectable `fetchImpl` plus the live `calls` capture array.
+ */
 function makeFetchStub(responses) {
+	/** @type {CapturedCall[]} */
 	const calls = [];
 	const fetchImpl = (url, init) => {
 		calls.push({ url, init, params: new URLSearchParams(init.body) });
@@ -56,13 +110,25 @@ function makeFetchStub(responses) {
 	return { fetchImpl, calls };
 }
 
-// Yield to the microtask queue so an awaited refresh inside a fired timer can settle.
+/**
+ * Yield to the microtask queue so an awaited refresh inside a fired timer can settle before assertions.
+ *
+ * @returns {Promise<void>}
+ *   Resolves on the next tick of the microtask queue.
+ */
 function flushMicrotasks() {
 	return new Promise((resolve) => {
 		process.nextTick(resolve);
 	});
 }
 
+/**
+ * Asserts the happy-path ROPC login: the correct endpoint/method/headers, a form body carrying
+ * `grant_type=password` + `scope=offline_access` + the public client id and NO `client_secret`, and a
+ * provider that exposes the access token and its `Bearer` header.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase(
 	'login posts ROPC + offline_access to the realm token endpoint with the public client (no secret)',
 	async () => {
@@ -91,6 +157,12 @@ runTestCase(
 	}
 );
 
+/**
+ * Asserts {@link buildTokenEndpoint} normalizes one-or-more trailing slashes on `keycloakUrl` to the
+ * single canonical token endpoint.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('login tolerates a trailing slash on keycloakUrl when building the token endpoint', async () => {
 	const stub = makeFetchStub([{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 300 } }]);
 
@@ -100,6 +172,12 @@ runTestCase('login tolerates a trailing slash on keycloakUrl when building the t
 	provider.stop();
 });
 
+/**
+ * Asserts the background loop fires at `expires_in - skew`, sends `grant_type=refresh_token` with the
+ * offline token (still no `client_secret`), and swaps in the freshly minted access token.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('auto-refresh exchanges the offline refresh_token for a fresh access token before expiry', async () => {
 	const stub = makeFetchStub([
 		{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 } },
@@ -130,10 +208,17 @@ runTestCase('auto-refresh exchanges the offline refresh_token for a fresh access
 	}
 });
 
+/**
+ * Asserts the bounded deadline wins at fire time: once `tokenExpirationInS` has elapsed the armed
+ * refresh self-cancels and performs no further token request.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('the refresh loop stops after tokenExpirationInS elapses (no further renewal)', async () => {
 	const stub = makeFetchStub([{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 } }]);
 
 	let fakeNowInMs = 1_000_000;
+	/** @type {() => number} */
 	const nowInMs = () => fakeNowInMs;
 
 	mock.timers.enable({ apis: ['setTimeout'] });
@@ -159,6 +244,12 @@ runTestCase('the refresh loop stops after tokenExpirationInS elapses (no further
 	}
 });
 
+/**
+ * Asserts the `Math.min(skewDelay, remainingWindow)` clamp: with a deadline far in the future the skew
+ * delay wins, so the loop keeps renewing as normal.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('a long deadline clamps the next refresh delay to the remaining window', async () => {
 	const stub = makeFetchStub([
 		{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 } },
@@ -166,6 +257,7 @@ runTestCase('a long deadline clamps the next refresh delay to the remaining wind
 	]);
 
 	let fakeNowInMs = 2_000_000;
+	/** @type {() => number} */
 	const nowInMs = () => fakeNowInMs;
 
 	mock.timers.enable({ apis: ['setTimeout'] });
@@ -190,21 +282,45 @@ runTestCase('a long deadline clamps the next refresh delay to the remaining wind
 	}
 });
 
+/**
+ * Asserts a non-2xx token response is turned into a {@link TokenError} (the HTTP-status guard in
+ * {@link postTokenRequest}).
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('login rejects a non-2xx token response with TokenError', async () => {
 	const stub = makeFetchStub([{ status: 401, body: { error: 'invalid_grant' } }]);
 	await assert.rejects(() => login({ ...BASE_OPTIONS, fetchImpl: stub.fetchImpl }), TokenError);
 });
 
+/**
+ * Asserts a 2xx response without a `refresh_token` is rejected: offline_access (and thus the offline
+ * token) is mandatory for the headless SDK flow.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('login rejects when the token response carries no refresh_token (missing offline_access)', async () => {
 	const stub = makeFetchStub([{ body: { access_token: 'access-1', expires_in: 300 } }]);
 	await assert.rejects(() => login({ ...BASE_OPTIONS, fetchImpl: stub.fetchImpl }), TokenError);
 });
 
+/**
+ * Asserts the required-option validation rejects an empty required string field (here `clientId`)
+ * before any network call.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('login validates required options', async () => {
 	const stub = makeFetchStub([]);
 	await assert.rejects(() => login({ ...BASE_OPTIONS, fetchImpl: stub.fetchImpl, clientId: '' }), TokenError);
 });
 
+/**
+ * Asserts {@link OfflineTokenProvider#getAuthorizationHeader} throws while no token is available (no
+ * bootstrap), and that {@link OfflineTokenProvider#getAccessToken} reports null.
+ *
+ * @returns {void}
+ */
 runTestCase('getAuthorizationHeader throws before bootstrap when no token is available', () => {
 	const stub = makeFetchStub([]);
 	const provider = new OfflineTokenProvider({ ...BASE_OPTIONS, fetchImpl: stub.fetchImpl });
@@ -212,21 +328,44 @@ runTestCase('getAuthorizationHeader throws before bootstrap when no token is ava
 	assert.equal(provider.getAccessToken(), null);
 });
 
+/**
+ * Asserts a 2xx response with a non-JSON body is rejected by the JSON-parse guard in
+ * {@link postTokenRequest}.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('login rejects a 2xx token response whose body is not valid JSON', async () => {
 	const stub = makeFetchStub([{ body: '<<<not-json>>>' }]);
 	await assert.rejects(() => login({ ...BASE_OPTIONS, fetchImpl: stub.fetchImpl }), TokenError);
 });
 
+/**
+ * Asserts a parseable 2xx body lacking an `access_token` is rejected by the access-token guard in
+ * {@link postTokenRequest}.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('login rejects a parseable token response that carries no access_token', async () => {
 	const stub = makeFetchStub([{ body: { refresh_token: 'offline-1', expires_in: 300 } }]);
 	await assert.rejects(() => login({ ...BASE_OPTIONS, fetchImpl: stub.fetchImpl }), TokenError);
 });
 
+/**
+ * Asserts {@link login} rejects when called with a null or undefined options object (the early guard).
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('login rejects a missing options object', async () => {
 	await assert.rejects(() => login(null), TokenError);
 	await assert.rejects(() => login(undefined), TokenError);
 });
 
+/**
+ * Asserts a failed background refresh is reported to the registered `onRefreshError` handler and leaves
+ * the still-valid access token untouched (no clobber on transient failure).
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('a failed background refresh is surfaced to onRefreshError and keeps the stale token', async () => {
 	const stub = makeFetchStub([
 		{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 } },
@@ -236,6 +375,7 @@ runTestCase('a failed background refresh is surfaced to onRefreshError and keeps
 	mock.timers.enable({ apis: ['setTimeout'] });
 	try {
 		const provider = await login({ ...BASE_OPTIONS, fetchImpl: stub.fetchImpl });
+		/** @type {unknown} */
 		let captured = null;
 		provider.onRefreshError((error) => {
 			captured = error;
@@ -255,6 +395,12 @@ runTestCase('a failed background refresh is surfaced to onRefreshError and keeps
 	}
 });
 
+/**
+ * Asserts a failed background refresh with NO registered handler is swallowed silently: nothing throws
+ * and the stale token survives.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('a failed background refresh without a registered handler is swallowed silently', async () => {
 	const stub = makeFetchStub([
 		{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 } },
@@ -277,6 +423,12 @@ runTestCase('a failed background refresh without a registered handler is swallow
 	}
 });
 
+/**
+ * Asserts refresh-token rotation handling: when a refresh response omits a new `refresh_token`, the
+ * provider keeps reusing the previously held offline token on subsequent refreshes.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('a refresh response without a rotated refresh_token keeps reusing the previous one', async () => {
 	const stub = makeFetchStub([
 		{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 } },
@@ -304,6 +456,12 @@ runTestCase('a refresh response without a rotated refresh_token keeps reusing th
 	}
 });
 
+/**
+ * Asserts an absent / zero `expires_in` falls back to `MIN_REFRESH_DELAY_IN_S` (1s) rather than spinning
+ * a hot refresh loop.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('an absent/zero expires_in falls back to the minimum refresh delay', async () => {
 	const stub = makeFetchStub([
 		// No expires_in -> the scheduler must clamp to MIN_REFRESH_DELAY_IN_S (1s), not spin a hot loop.
@@ -328,10 +486,17 @@ runTestCase('an absent/zero expires_in falls back to the minimum refresh delay',
 	}
 });
 
+/**
+ * Asserts the schedule-time deadline guard: `tokenExpirationInS=0` makes the deadline equal `now` at
+ * bootstrap, so `scheduleRefresh` sees a non-positive remaining window and arms no timer.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('a non-positive tokenExpirationInS lapses the loop immediately at schedule time', async () => {
 	const stub = makeFetchStub([{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 } }]);
 
 	let fakeNowInMs = 5_000_000;
+	/** @type {() => number} */
 	const nowInMs = () => fakeNowInMs;
 
 	mock.timers.enable({ apis: ['setTimeout'] });
@@ -357,7 +522,14 @@ runTestCase('a non-positive tokenExpirationInS lapses the loop immediately at sc
 	}
 });
 
+/**
+ * Asserts the constructor default-branch: when no `fetchImpl` is supplied the provider uses
+ * `globalThis.fetch`. The global is monkey-patched (and restored) so the branch runs without network.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('login falls back to the global fetch when no fetchImpl is provided', async () => {
+	/** @type {string[]} */
 	const calls = [];
 	const originalFetch = globalThis.fetch;
 	// Override the global fetch so the default-branch (`globalThis.fetch`) is exercised without network.
@@ -383,6 +555,13 @@ runTestCase('login falls back to the global fetch when no fetchImpl is provided'
 	}
 });
 
+/**
+ * Asserts the real-event-loop path: with no mocked timers the armed `setTimeout` returns a Node
+ * `Timeout` whose `.unref()` line runs, and {@link OfflineTokenProvider#stop} is idempotent (a second
+ * call takes the already-cleared `timer === null` branch).
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('the refresh timer arms on the real event loop and is unref-ed (does not block exit)', async () => {
 	// No mocked timers here: this exercises the real setTimeout path so the Timeout.unref() call line runs.
 	const stub = makeFetchStub([{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 300 } }]);
@@ -394,9 +573,17 @@ runTestCase('the refresh timer arms on the real event loop and is unref-ed (does
 	provider.stop();
 });
 
+/**
+ * Asserts the `stopped`-guard in `scheduleRefresh`: stopping mid-refresh lets the in-flight call
+ * complete (updating the token) but suppresses arming the next refresh, so no further fetch occurs.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('stop() during an in-flight refresh suppresses re-arming the next refresh', async () => {
+	/** @type {URLSearchParams[]} */
 	const calls = [];
 	// Captures the refresh resolver so the test can complete the in-flight refresh on demand.
+	/** @type {() => void} */
 	let releaseRefresh = () => {};
 	const fetchImpl = (_url, init) => {
 		calls.push(new URLSearchParams(init.body));
@@ -444,6 +631,12 @@ runTestCase('stop() during an in-flight refresh suppresses re-arming the next re
 	}
 });
 
+/**
+ * Asserts the `stopped`-guard at the top of {@link OfflineTokenProvider#refresh}: invoking refresh after
+ * stop short-circuits before any token request, so only the initial login call was made.
+ *
+ * @returns {Promise<void>}
+ */
 runTestCase('refresh() returns early when the provider is already stopped', async () => {
 	const stub = makeFetchStub([{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 } }]);
 	const provider = await login({ ...BASE_OPTIONS, fetchImpl: stub.fetchImpl });
