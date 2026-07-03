@@ -135,7 +135,7 @@ function makeApi(response) {
 
 runTestCase('buildAuthMetadata carries the bearer token in the authorization header', () => {
 	const metadata = buildAuthMetadata(makeTokenProvider());
-	assert.deepEqual(metadata, { authorization: BEARER_HEADER });
+	assert.deepEqual(metadata, { Authorization: BEARER_HEADER });
 });
 
 runTestCase('createSpeech2TextClient constructs the generated client with (host, null, null)', () => {
@@ -161,7 +161,7 @@ runTestCase(
 		assert.equal(capture.request.registeredOnly, true);
 		assert.equal(capture.request.setLanguagesCalled, true);
 		assert.deepEqual(capture.request.languages, languages);
-		assert.deepEqual(capture.metadata, { authorization: BEARER_HEADER });
+		assert.deepEqual(capture.metadata, { Authorization: BEARER_HEADER });
 		assert.deepEqual(pipelines, [{ id: 'pipeline_de', active: true }]);
 	}
 );

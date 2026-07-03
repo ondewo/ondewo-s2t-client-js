@@ -123,7 +123,7 @@ const { login } = require('../auth/offlineTokenProvider');
  *   The per-call metadata object to pass as the second argument of any RPC.
  */
 function buildAuthMetadata(tokenProvider) {
-	return { authorization: tokenProvider.getAuthorizationHeader() };
+	return { Authorization: tokenProvider.getAuthorizationHeader() };
 }
 
 /**
