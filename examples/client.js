@@ -113,9 +113,8 @@ const { login } = require('../auth/offlineTokenProvider');
  */
 
 /**
- * Build the gRPC-web call metadata carrying the Keycloak bearer token. This is the CURRENT auth
- * convention for ONDEWO clients: an `Authorization: Bearer <access_token>` header (the legacy
- * cai-token / HTTP-basic login was removed under the Keycloak migration).
+ * Build the gRPC-web call metadata carrying the Keycloak bearer token. This is the auth convention
+ * for ONDEWO clients: an `Authorization: Bearer <access_token>` header.
  *
  * @param {TokenProvider} tokenProvider
  *   The logged-in provider returned by `login(...)`.
