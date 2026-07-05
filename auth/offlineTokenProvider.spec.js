@@ -166,7 +166,11 @@ runTestCase(
 runTestCase('login tolerates a trailing slash on keycloakUrl when building the token endpoint', async () => {
 	const stub = makeFetchStub([{ body: { access_token: 'access-1', refresh_token: 'offline-1', expires_in: 300 } }]);
 
-	const provider = await login({ ...BASE_OPTIONS, keycloakUrl: 'https://auth.example.com/auth///', fetchImpl: stub.fetchImpl });
+	const provider = await login({
+		...BASE_OPTIONS,
+		keycloakUrl: 'https://auth.example.com/auth///',
+		fetchImpl: stub.fetchImpl
+	});
 
 	assert.equal(stub.calls[0].url, EXPECTED_TOKEN_ENDPOINT);
 	provider.stop();
@@ -538,7 +542,8 @@ runTestCase('login falls back to the global fetch when no fetchImpl is provided'
 		return Promise.resolve({
 			ok: true,
 			status: 200,
-			text: () => Promise.resolve(JSON.stringify({ access_token: 'global-1', refresh_token: 'offline-1', expires_in: 31 }))
+			text: () =>
+				Promise.resolve(JSON.stringify({ access_token: 'global-1', refresh_token: 'offline-1', expires_in: 31 }))
 		});
 	};
 
@@ -591,7 +596,8 @@ runTestCase('stop() during an in-flight refresh suppresses re-arming the next re
 			return Promise.resolve({
 				ok: true,
 				status: 200,
-				text: () => Promise.resolve(JSON.stringify({ access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 }))
+				text: () =>
+					Promise.resolve(JSON.stringify({ access_token: 'access-1', refresh_token: 'offline-1', expires_in: 31 }))
 			});
 		}
 		// Hold the refresh response open until the test releases it, after calling stop().
@@ -600,7 +606,8 @@ runTestCase('stop() during an in-flight refresh suppresses re-arming the next re
 				resolve({
 					ok: true,
 					status: 200,
-					text: () => Promise.resolve(JSON.stringify({ access_token: 'access-2', refresh_token: 'offline-2', expires_in: 31 }))
+					text: () =>
+						Promise.resolve(JSON.stringify({ access_token: 'access-2', refresh_token: 'offline-2', expires_in: 31 }))
 				});
 			};
 		});
