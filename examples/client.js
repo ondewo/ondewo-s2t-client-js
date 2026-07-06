@@ -41,8 +41,9 @@
 // referenced as globals) so the example logic stays hermetically unit-testable -- see `client.spec.js`.
 
 'use strict';
-/* global require, module */
+/* global require, module, process, __dirname */
 
+const path = require('path');
 const { login } = require('../auth/offlineTokenProvider');
 
 /**
@@ -195,24 +196,103 @@ async function listRegisteredPipelines(api, client, tokenProvider, languages = [
  *   The summarized pipelines that were listed.
  */
 async function main(config, dependencies = { login }) {
+	console.log('[s2t-example] START: listing registered S2T pipelines');
+	console.log(`[s2t-example] Authenticating against Keycloak realm '${config.realm}' as '${config.username}'`);
 	const tokenProvider = await dependencies.login({
 		keycloakUrl: config.keycloakUrl,
 		realm: config.realm,
 		clientId: config.clientId,
 		username: config.username,
-		password: config.password
+		password: config.password,
+		keycloakVerifySsl: config.keycloakVerifySsl
 	});
 	try {
+		console.log(`[s2t-example] Connecting to S2T gRPC-web endpoint ${config.grpcHost}`);
 		const client = createSpeech2TextClient(config.api, config.grpcHost);
 		const pipelines = await listRegisteredPipelines(config.api, client, tokenProvider, config.languages);
-		console.log(`Found ${pipelines.length} registered S2T pipeline(s):`);
+		console.log(`[s2t-example] Found ${pipelines.length} registered S2T pipeline(s):`);
 		for (const pipeline of pipelines) {
-			console.log(`  - ${pipeline.id} (active=${pipeline.active})`);
+			console.log(`[s2t-example]   - ${pipeline.id} (active=${pipeline.active})`);
 		}
+		console.log('[s2t-example] DONE: listing registered S2T pipelines');
 		return pipelines;
 	} finally {
 		tokenProvider.stop();
 	}
 }
 
-module.exports = { buildAuthMetadata, createSpeech2TextClient, listRegisteredPipelines, main };
+/**
+ * Read a required environment variable, throwing a descriptive error when it is missing/blank so a
+ * misconfigured `environment.env` fails fast with a clear message instead of a cryptic auth error.
+ *
+ * @param {string} name
+ *   The canonical environment variable name.
+ * @returns {string}
+ *   The trimmed, non-empty value.
+ */
+function requireEnv(name) {
+	const value = process.env[name];
+	if (value === undefined || value.trim() === '') {
+		throw new Error(`Missing required environment variable ${name} (set it in examples/environment.env)`);
+	}
+	return value.trim();
+}
+
+/**
+ * Build the {@link main} config object from the canonical ONDEWO/Keycloak environment variables loaded
+ * from `examples/environment.env`. The generated gRPC-web `api` namespace is passed in separately.
+ *
+ * @param {S2tApi} api
+ *   The generated S2T namespace (`ondewo_s2t_api`).
+ * @returns {object}
+ *   The config object accepted by {@link main}.
+ */
+function buildConfigFromEnv(api) {
+	const host = requireEnv('ONDEWO_HOST');
+	const port = requireEnv('ONDEWO_PORT');
+	const useSecureChannel = (process.env.ONDEWO_USE_SECURE_CHANNEL ?? 'true').trim().toLowerCase() !== 'false';
+	const scheme = 'http' + 's'.repeat(Number(useSecureChannel));
+	const languages = (process.env.ONDEWO_S2T_LANGUAGES ?? '')
+		.split(',')
+		.map((code) => code.trim())
+		.filter((code) => code.length > 0);
+	return {
+		api,
+		grpcHost: `${scheme}://${host}:${port}`,
+		keycloakUrl: requireEnv('KEYCLOAK_URL'),
+		realm: requireEnv('KEYCLOAK_REALM'),
+		clientId: requireEnv('KEYCLOAK_CLIENT_ID'),
+		username: requireEnv('KEYCLOAK_USER_NAME'),
+		password: requireEnv('KEYCLOAK_PASSWORD'),
+		keycloakVerifySsl: (process.env.KEYCLOAK_VERIFY_SSL ?? 'true').trim().toLowerCase() !== 'false',
+		languages
+	};
+}
+
+module.exports = { buildAuthMetadata, createSpeech2TextClient, listRegisteredPipelines, buildConfigFromEnv, main };
+
+// Node runnable entrypoint. When this file is executed directly (`node examples/client.js`) it loads
+// `examples/environment.env`, builds the config from the canonical env vars and runs the example. When
+// it is `require`d (browser bundle usage or `client.spec.js`) this block does not run.
+if (require.main === module) {
+	// Everything (env loading, config validation, the RPC) runs inside one promise chain so any failure
+	// is reported through a single catch with a clear message and a non-zero exit code.
+	Promise.resolve()
+		.then(() => {
+			require('dotenv').config({ path: path.join(__dirname, 'environment.env') });
+			// The generated gRPC-web stubs ship as a browser bundle (webpack `libraryTarget: 'var'`); reach
+			// it through the global when present, otherwise fall back to requiring the bundle.
+			const api = globalThis.ondewo_s2t_api ?? require('../api/ondewo_s2t_api.js');
+			return main(buildConfigFromEnv(api));
+		})
+		.then(() => {
+			process.exit(0);
+		})
+		.catch((error) => {
+			console.error('[s2t-example] FAILED to list S2T pipelines:', error);
+			if (error && error.code !== undefined) {
+				console.error(`[s2t-example] gRPC-web status code=${error.code} details=${error.message}`);
+			}
+			process.exit(1);
+		});
+}
