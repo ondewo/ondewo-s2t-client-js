@@ -15,7 +15,6 @@ exclude: '(^|/)(node_modules|lib|dist|build|\.venv)/|(^|/)package-lock\.json$|(_
 fail_fast: false
 
 repos:
-
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.23.0
     hooks:
@@ -25,8 +24,8 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
-        args: [ maxkb=1024 ]
-      - id: check-json          # validate (does NOT reformat) json/package.json
+        args: [maxkb=1024]
+      - id: check-json # validate (does NOT reformat) json/package.json
       - id: check-yaml
       - id: check-xml
       - id: check-merge-conflict
@@ -45,12 +44,15 @@ repos:
     rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
-        stages: [ commit-msg ]
+        stages: [commit-msg]
 
   - repo: https://github.com/milin/giticket
     rev: '1.92'
     hooks:
       - id: giticket
-        args: [ '--regex=(?:(?:feature|bugfix|support|hotfix)/)?(OND[0-9]{3}-[0-9]{1,5})[_-][\w-]+',
-                '--format=[{ticket}] {commit_msg}',
-                '--mode=regex_match' ]
+        args:
+          [
+            '--regex=(?:(?:feature|bugfix|support|hotfix)/)?(OND[0-9]{3}-[0-9]{1,5})[_-][\w-]+',
+            '--format=[{ticket}] {commit_msg}',
+            '--mode=regex_match'
+          ]
