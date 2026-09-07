@@ -14,8 +14,7 @@ export
 # 		Variables
 ########################################################
 
-ONDEWO_S2T_VERSION=7.4.0
-
+ONDEWO_S2T_VERSION=7.4.1
 S2T_API_GIT_BRANCH=OND211-2418-add-keycloak-for-2-fa
 ONDEWO_PROTO_COMPILER_GIT_BRANCH=tags/5.14.0
 ONDEWO_PROTO_COMPILER_DIR=ondewo-proto-compiler
@@ -29,7 +28,7 @@ IMAGE_UTILS_NAME=ondewo-s2t-client-utils-js:${ONDEWO_S2T_VERSION}
 PRETTIER_WRITE?=
 
 CURRENT_RELEASE_NOTES=`cat RELEASE.md \
-	| perl -ne 'print if /Release ONDEWO S2T Js Client ${ONDEWO_S2T_VERSION}/../\*\*/'`
+	| perl -ne 'print if /Release ONDEWO S2T Js Client ${ONDEWO_S2T_VERSION}/../^\*{5}/'`
 
 GH_REPO="https://github.com/ondewo/ondewo-s2t-client-js"
 DEVOPS_ACCOUNT_GIT="ondewo-devops-accounts"

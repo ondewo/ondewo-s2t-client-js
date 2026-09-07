@@ -24,18 +24,19 @@ config:
   # (and, via an applyFix bug, corrupts adjacent list items). Keep them.
   MD053: false
 # NO `globs:` ON PURPOSE. pre-commit hands this hook an explicit file list and splits it across
-# PARALLEL markdownlint-cli2 processes; a `globs: ["*.md"]` entry made every one of those processes
+# PARALLEL markdownlint-cli2 processes; a `globs: ['*.md']` entry made every one of those processes
 # ALSO pick up all root *.md files, so two processes auto-fixed and rewrote the same RELEASE.md
-# concurrently and their interleaved writes dropped characters mid-line ("ONDEWO" -> "ONDEW",
-# "Version" -> "Vesion", "https://" -> "https:/", "*****************" -> "****************").
+# concurrently and their interleaved writes dropped characters mid-line ('ONDEWO' -> 'ONDEW',
+# 'Version' -> 'Vesion', '*****************' -> '****************', '## Release' -> '# Release').
+# Reproduced on v0.23.2 in 18 of 25 runs; it is a concurrency bug, not a version bug.
 # With no globs each file is linted by exactly one process. Consequence: a bare `markdownlint-cli2`
 # with no arguments now lints nothing -- always pass paths (or go through pre-commit).
 ignores:
-  - "node_modules/**"
-  - "api/**"
-  - "src/ondewo-s2t-api/**"
-  - "ondewo-proto-compiler/**"
-  - "lib/**"
-  - "dist/**"
-  - "build/**"
-  - ".venv/**"
+  - 'node_modules/**'
+  - 'api/**'
+  - 'src/ondewo-s2t-api/**'
+  - 'ondewo-proto-compiler/**'
+  - 'lib/**'
+  - 'dist/**'
+  - 'build/**'
+  - '.venv/**'

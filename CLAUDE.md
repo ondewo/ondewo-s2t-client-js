@@ -128,8 +128,8 @@ c8 --100 --per-file --all --include 'auth/**/*.js' --include 'examples/**/*.js' 
   `fetchImpl` option, time via `node:test`'s `mock.timers`, and the example's api/client/login are faked.
   `mock.timers` needs Node >= 20.4; CI runs Node 20.
 - The ONE narrow coverage exclusion is the `/* c8 ignore start|stop */` around the
-  `if (require.main === module)` block in `examples/client.js`: 8 lines of pure wiring (dotenv, resolving the
-  webpack bundle, `process.exit`) that are unreachable under `node --test`. Every bit of logic it invokes
+  `if (require.main === module)` block in `examples/client.js`: ten lines of pure wiring (dotenv, resolving
+  the webpack bundle, `process.exit`) that are unreachable under `node --test`. Every bit of logic it invokes
   lives in the exported `runFromCli(dependencies)`, which IS tested. Do not widen it — inject a seam and
   write a test instead.
 - Two mutation checks worth re-running after touching auth: flipping `INSECURE_AGENT_OPTIONS` to
@@ -167,9 +167,12 @@ git submodule status   # must show the peeled commit of <VERSION>
 ```
 
 - **The release does NOT auto-pull the latest tag.** `make build` → `check_out_correct_submodule_versions`
-  runs `git checkout ${ONDEWO_PROTO_COMPILER_GIT_BRANCH}`, so the Makefile variable is authoritative. Letting
-  it fall behind the gitlink silently DOWNGRADES the submodule — that is exactly what happened here
-  (Makefile said `tags/5.10.0` while the gitlink was 5.11.0).
+  runs `git checkout ${ONDEWO_PROTO_COMPILER_GIT_BRANCH}` and then `git add`s the submodule, so the Makefile
+  variable is authoritative and a gitlink ahead of it is silently DOWNGRADED and committed. That has already
+  happened on this branch: `Update proto compiler dependency to version 5.12.0` (`c948eeb`) and `… 5.13.0`
+  (`6d66d2b`) moved the gitlink alone, and the next release commit `Preparing for Release 7.4.1` (`6ac05e9`)
+  put it straight back to 5.10.0 — the value the Makefile still named. **Always edit both, in the same
+  commit.**
 - **A pin bump changes nothing that is already generated.** The compiler's own fixes (e.g. 5.13.0's JS
   `public-api.js` self-export / doubled `'././'` prefix fixes) only reach this client through `make build`.
   Never write a RELEASE.md line claiming a regeneration that did not happen.
@@ -198,9 +201,10 @@ Reject `-pre1` tags that `pre-commit autoupdate` may propose for conventional-pr
   file list and splits it across PARALLEL `markdownlint-cli2` processes; `globs: ["*.md"]` made every one of
   those processes additionally pick up all root `*.md`, so two of them auto-fixed and rewrote `RELEASE.md`
   concurrently and their interleaved writes dropped characters mid-line (`ONDEWO` → `ONDEW`,
-  `Version` → `Vesion`, `https://` → `https:/`, `*****************` → `****************`). Reproduced on both
-  v0.23.0 and v0.23.2 — it is a concurrency bug, not a version bug. Consequence of the fix: a bare
-  `markdownlint-cli2` with no arguments now lints nothing; always pass paths, or go through pre-commit.
+  `Version` → `Vesion`, `*****************` → `****************`, `## Release` → `# Release`). Reproduced on
+  v0.23.2 in 18 of 25 runs of the two commands pre-commit actually issues — it is a concurrency bug, not a
+  version bug. Consequence of the fix: a bare `markdownlint-cli2` with no arguments now lints nothing;
+  always pass paths, or go through pre-commit.
 - After ANY markdownlint change, diff `RELEASE.md` for content safety: every `## Release … <VERSION>`
   heading, every `*****` separator and every whitespace-normalized word token must survive, and `make TEST`
   must still print the current release notes.
@@ -209,10 +213,21 @@ Reject `-pre1` tags that `pre-commit autoupdate` may propose for conventional-pr
 
 `.husky/pre-commit` runs `make prettier PRETTIER_WRITE=-w` BEFORE `pre-commit run`. Anything prettier
 rewrites there lands unstaged, and `pre-commit run` then aborts with _"Your pre-commit configuration is
-unstaged"_. `.prettierignore` therefore excludes `.pre-commit-config.yaml`, `.markdownlint-cli2.yaml`,
-`CLAUDE.md`, `.ci-package.json`, `README.md`, `RELEASE.md`, `coverage/` and `.nyc_output/`. Keep it that way;
-`./node_modules/.bin/prettier --config .prettierrc --check --ignore-path .prettierignore ./` must report
-zero warnings.
+unstaged"_ (the hook guards against exactly that by skipping `pre-commit run` while
+`.pre-commit-config.yaml` is dirty).
+
+Two rules keep that quiet, and they are different rules:
+
+- **Files prettier and markdownlint would fight over are prettier-ignored.** `.prettierrc` sets `useTabs`,
+  so prettier re-tabs the fenced blocks markdownlint's MD010 de-tabs; `README.md` and `RELEASE.md` are
+  therefore in `.prettierignore` and markdown style is markdownlint's alone. `coverage/` and `.nyc_output/`
+  are there too — gitignored c8 output that `-w` would otherwise rewrite as churn.
+- **Everything else stays prettier-clean rather than ignored**, including the tool config prettier does own:
+  `.pre-commit-config.yaml`, `.markdownlint-cli2.yaml`, `.ci-package.json` and `CLAUDE.md`. After editing any
+  of them run `make prettier PRETTIER_WRITE=-w`, or the next commit's husky hook will.
+
+`make prettier` (check mode, no `PRETTIER_WRITE`) must report zero warnings on a clean checkout — if it does
+not, the release masks the failure by running prettier in WRITE mode and leaves a dirty tree behind.
 
 Note `eslint.config.mjs` **ignores `auth/*.js`**: the hand-written token provider is linted by nothing.
 Its globals (`require`, `module`, `setTimeout`, `URLSearchParams`) are absent from the config's
@@ -252,6 +267,9 @@ devDeps. The durable fix, present here:
   `src/RELEASE.md` from the latest release tag.
 - `make TEST` prints the sliced release notes and masks the tokens (`<set>`/`<unset>`); every token-bearing
   recipe line is `@`-prefixed so make never echoes a secret.
+- `CURRENT_RELEASE_NOTES` ends its perl range at `/^\*{5}/`, anchored and five-wide on purpose: a bare
+  `/\*\*/` matches the first inline `**bold**` span in an entry just as readily as the `*****` separator and
+  would truncate the GitHub release notes there, with no error from `gh release create`.
 - **Trust the registry, not the log.** After any release, verify the GitHub release AND the npm package
   directly — the orchestrating `make release_all_clients` in the API repo reports a failed client release as
   "already released".
