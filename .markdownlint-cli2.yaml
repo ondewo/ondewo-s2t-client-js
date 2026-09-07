@@ -23,8 +23,13 @@ config:
   # markdownlint treats them as "unused" link references and its --fix DELETES them
   # (and, via an applyFix bug, corrupts adjacent list items). Keep them.
   MD053: false
-globs:
-  - "*.md"
+# NO `globs:` ON PURPOSE. pre-commit hands this hook an explicit file list and splits it across
+# PARALLEL markdownlint-cli2 processes; a `globs: ["*.md"]` entry made every one of those processes
+# ALSO pick up all root *.md files, so two processes auto-fixed and rewrote the same RELEASE.md
+# concurrently and their interleaved writes dropped characters mid-line ("ONDEWO" -> "ONDEW",
+# "Version" -> "Vesion", "https://" -> "https:/", "*****************" -> "****************").
+# With no globs each file is linted by exactly one process. Consequence: a bare `markdownlint-cli2`
+# with no arguments now lints nothing -- always pass paths (or go through pre-commit).
 ignores:
   - "node_modules/**"
   - "api/**"
