@@ -19,6 +19,13 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # `make build` regenerates the ROOT package.json from src/package.json, and
+      # `make restore_ci_test_setup` merges .ci-package.json back over it. This step fails loudly if the
+      # two ever disagree on a script or dependency .ci-package.json declares, i.e. if the restore has
+      # silently gone stale.
+      - name: package.json <-> .ci-package.json mirror
+        run: npm run test:drift
+
       # ONE gate for the whole hand-written surface. The repo is ~95% generated gRPC/protobuf stubs, so
       # coverage is scoped to auth/ (the D18 Keycloak offline-token provider) and examples/ (the mock-based
       # gRPC-web example -- the client and the login are stubbed, no live backend). Every spec runs in a
