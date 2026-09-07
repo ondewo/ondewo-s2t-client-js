@@ -1,8 +1,7 @@
 {
   "description": "ONDEWO Speech to Text (S2T) Client library for Js",
   "scripts": {
-    "test": "c8 --check-coverage --lines 100 --branches 100 --functions 100 --include auth/offlineTokenProvider.js --exclude '**/*.spec.js' --reporter text node --test auth/offlineTokenProvider.spec.js",
-    "test:examples": "node --test examples/client.spec.js"
+    "test": "c8 --100 --per-file --all --include 'auth/**/*.js' --include 'examples/**/*.js' --exclude '**/*.spec.js' --reporter text node --test auth/offlineTokenProvider.spec.js examples/client.spec.js"
   },
   "devDependencies": {
     "c8": "^11.0.0"

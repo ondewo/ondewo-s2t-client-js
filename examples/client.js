@@ -269,30 +269,72 @@ function buildConfigFromEnv(api) {
 	};
 }
 
-module.exports = { buildAuthMetadata, createSpeech2TextClient, listRegisteredPipelines, buildConfigFromEnv, main };
-
-// Node runnable entrypoint. When this file is executed directly (`node examples/client.js`) it loads
-// `examples/environment.env`, builds the config from the canonical env vars and runs the example. When
-// it is `require`d (browser bundle usage or `client.spec.js`) this block does not run.
-if (require.main === module) {
-	// Everything (env loading, config validation, the RPC) runs inside one promise chain so any failure
-	// is reported through a single catch with a clear message and a non-zero exit code.
-	Promise.resolve()
+/**
+ * Run the example as a command-line program: load `examples/environment.env`, build the config from the
+ * canonical environment variables, list the pipelines and report the exit code. Everything runs inside
+ * one promise chain so any failure is reported through a single catch with a clear message and a
+ * non-zero exit code.
+ *
+ * The three process-level side effects (dotenv, resolving the webpack bundle, `process.exit`) are
+ * injected instead of referenced directly, which leaves the `require.main === module` block below as
+ * pure wiring and makes this whole path unit-testable -- see `client.spec.js`.
+ *
+ * @param {object} dependencies
+ *   The process-level seams, all required (no defaults, so nothing can reach the real process by
+ *   accident from a test).
+ * @param {(envPath: string) => void} dependencies.loadEnv
+ *   Load the `.env` file at `envPath` into `process.env`.
+ * @param {() => S2tApi} dependencies.resolveApi
+ *   Resolve the generated gRPC-web namespace.
+ * @param {(config: object) => Promise<PipelineSummary[]>} dependencies.run
+ *   Run the example for the built config (the real {@link main}).
+ * @param {(code: number) => void} dependencies.exit
+ *   Terminate the process with the given exit code.
+ * @returns {Promise<void>}
+ *   Resolves once the run has finished and its exit code has been reported.
+ */
+function runFromCli(dependencies) {
+	return Promise.resolve()
 		.then(() => {
-			require('dotenv').config({ path: path.join(__dirname, 'environment.env') });
-			// The generated gRPC-web stubs ship as a browser bundle (webpack `libraryTarget: 'var'`); reach
-			// it through the global when present, otherwise fall back to requiring the bundle.
-			const api = globalThis.ondewo_s2t_api ?? require('../api/ondewo_s2t_api.js');
-			return main(buildConfigFromEnv(api));
+			dependencies.loadEnv(path.join(__dirname, 'environment.env'));
+			return dependencies.run(buildConfigFromEnv(dependencies.resolveApi()));
 		})
 		.then(() => {
-			process.exit(0);
+			dependencies.exit(0);
 		})
 		.catch((error) => {
 			console.error('[s2t-example] FAILED to list S2T pipelines:', error);
 			if (error && error.code !== undefined) {
 				console.error(`[s2t-example] gRPC-web status code=${error.code} details=${error.message}`);
 			}
-			process.exit(1);
+			dependencies.exit(1);
 		});
 }
+
+module.exports = {
+	buildAuthMetadata,
+	createSpeech2TextClient,
+	listRegisteredPipelines,
+	requireEnv,
+	buildConfigFromEnv,
+	runFromCli,
+	main
+};
+
+// Node runnable entrypoint. When this file is executed directly (`node examples/client.js`) it loads
+// `examples/environment.env`, builds the config from the canonical env vars and runs the example. When
+// it is `require`d (browser bundle usage or `client.spec.js`) this block does not run.
+/* c8 ignore start -- CLI-only wiring, unreachable under `node --test` (require.main is the test runner).
+   It contains no logic: the four values below are exactly the process-level seams runFromCli() is
+   injected with, and runFromCli() itself is covered by client.spec.js. */
+if (require.main === module) {
+	runFromCli({
+		loadEnv: (envPath) => require('dotenv').config({ path: envPath }),
+		// The generated gRPC-web stubs ship as a browser bundle (webpack `libraryTarget: 'var'`); reach
+		// it through the global when present, otherwise fall back to requiring the bundle.
+		resolveApi: () => globalThis.ondewo_s2t_api ?? require('../api/ondewo_s2t_api.js'),
+		run: main,
+		exit: (code) => process.exit(code)
+	});
+}
+/* c8 ignore stop */
