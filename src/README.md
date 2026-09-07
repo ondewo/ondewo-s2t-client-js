@@ -68,7 +68,24 @@ The `make build` command is dependent on 2 `repositories` and their speciefied `
 
 Other than creating the proto-code, `build` also installs the `dev-dependencies` and changes the owner of the proto-code-files from `root` to the `current user`.
 
-> :white_check_mark: The js-compiler (version ~4.1.1) will prompt to download webpack -- write yes / y to finish the build
+`ONDEWO_PROTO_COMPILER_GIT_BRANCH` is currently `tags/5.14.0`. `make build` is what applies a new compiler version: bumping the pin alone moves the submodule but does **not** rewrite a single already-generated stub in `api/`.
+
+> :white_check_mark: The js-compiler will prompt to download webpack -- write yes / y to finish the build
+
+## Development
+
+```shell
+npm install                      ## Install dependencies (CI uses Node 20)
+npm test                         ## Every spec + the 100% coverage gate
+npm run test:drift               ## package.json <-> .ci-package.json mirror
+make eslint                      ## Lint
+make prettier PRETTIER_WRITE=-w  ## Format
+uvx pre-commit run --all-files   ## markdownlint-cli2 + file-hygiene hooks
+```
+
+`npm test` is the only test gate, and the one `.github/workflows/tests.yml` runs. It executes every spec in a single `c8` process at a 100% statement/branch/function/line threshold over the hand-written sources (`auth/**/*.js`, `examples/**/*.js`) -- `--per-file` so no file can be averaged away, `--all` so a new hand-written file that no test requires cannot sit at 0%. The generated `api/` bundle, the two submodules and the `*.spec.js` files are out of scope.
+
+Git hooks are activated by `make install_precommit_hooks`: `.husky/pre-commit` runs eslint, prettier and the pre-commit framework; `.husky/pre-push` runs `npm test` (and skips itself for the three pushes `make release` performs); `.husky/commit-msg` validates the Conventional Commit subject **before** giticket prepends the `[OND…-…]` ticket taken from the branch name.
 
 ## GitHub Repository - Release Automation
 
