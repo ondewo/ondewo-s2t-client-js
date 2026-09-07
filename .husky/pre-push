@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# Local equivalent of the CI gate (.github/workflows/tests.yml): every spec plus the 100%
+# statement/branch/function/line coverage threshold on the hand-written sources, before anything
+# leaves this machine.
+#
+# Deliberately on pre-push and NOT in .husky/pre-commit: `make run_precommit_hooks` executes
+# .husky/pre-commit DIRECTLY and `make release` calls it, so `npm test` there would run the coverage
+# gate inside the automated release, right after the codegen has rewritten api/ and package.json.
+#
+# To skip on purpose (e.g. sharing a work-in-progress branch):  git push --no-verify
+
+set -e
+
+# WHY THE GUARD BELOW: `make release` starts with `make install_precommit_hooks`, which runs
+# `npx husky install` and thereby activates this hook, and then pushes three times, none of them with
+# --no-verify:
+#   git push                              (the "Preparing for Release <version>" commit)
+#   git push -u origin release/<version>  (create_release_branch)
+#   git push origin <version>             (create_release_tag)
+# Failing there would abort the release AFTER the release commit but BEFORE `npm publish`, leaving a
+# half-finished release behind. Git feeds the refs being pushed to this hook on stdin as
+# "<local ref> <local sha> <remote ref> <remote sha>", so the release pushes are recognised and
+# skipped: the release branch and the tag by their remote ref, the release commit by its subject.
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+  refs/tags/* | refs/heads/release/*)
+    echo "pre-push: $remote_ref is a release ref -> skipping the test suite"
+    exit 0
+    ;;
+  esac
+  case "$(git log -1 --pretty=%s "$local_sha" 2>/dev/null)" in
+  'Preparing for Release '*)
+    echo 'pre-push: release commit detected -> skipping the test suite'
+    exit 0
+    ;;
+  esac
+done
+
+npm test
