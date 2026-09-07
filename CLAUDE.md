@@ -209,7 +209,7 @@ Reject `-pre1` tags that `pre-commit autoupdate` may propose for conventional-pr
   heading, every `*****` separator and every whitespace-normalized word token must survive, and `make TEST`
   must still print the current release notes.
 
-## Prettier owns code, not tool config
+## Prettier, markdownlint and the husky ordering
 
 `.husky/pre-commit` runs `make prettier PRETTIER_WRITE=-w` BEFORE `pre-commit run`. Anything prettier
 rewrites there lands unstaged, and `pre-commit run` then aborts with _"Your pre-commit configuration is
