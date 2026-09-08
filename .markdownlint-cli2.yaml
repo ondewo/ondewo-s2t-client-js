@@ -7,10 +7,12 @@ config:
   # MD033 no-inline-html: docs embed <p>/<code> HTML tags.
   MD033: false
   # MD024 duplicate-heading: the release-automation changelog repeats
-  # "### Improvements" under every release section AND contains genuine historical
-  # duplicate sibling version headings (e.g. two "Release ... 7.2.0" / "... 3.3.0"
-  # entries) that must NOT be rewritten (release history + Makefile note-extraction
-  # grep depend on the exact heading text). Disable rather than mangle history.
+  # "### Improvements" under every release section, so this must stay disabled.
+  # It previously also covered duplicate VERSION headings left by the missing
+  # duplicate-entry guard (two "Release ... 7.2.0" / "... 3.3.0" blocks); those have
+  # since been collapsed/merged and no duplicate version heading remains. The
+  # release history and the Makefile note-extraction grep depend on the exact
+  # heading text, so never let a fixer rewrite these headings.
   MD024: false
   # MD040 fenced-code-language: README embeds plain directory-tree / output blocks.
   MD040: false
