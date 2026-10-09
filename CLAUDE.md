@@ -273,9 +273,9 @@ devDeps. The durable fix, present here:
 - **Trust the registry, not the log.** After any release, verify the GitHub release AND the npm package
   directly — the orchestrating `make release_all_clients` in the API repo reports a failed client release as
   "already released".
-- **The published npm package ships `api/`, `package.json`, `LICENSE` and `README.md` only**
-  (`create_npm_package`). `auth/` and `examples/` are NOT published, so consumers of the npm package reach
-  the token provider through the git repo, not the tarball.
+- **The published npm package ships `api/`, `auth/` (without its specs), `package.json`, `LICENSE` and
+  `README.md`** (`create_npm_package`). `examples/` is NOT published. `auth/` ships since the gRPC-web
+  endpoint builder (`auth/grpcWebEndpoint.js`, README "TLS, mutual TLS and certificates") was added.
 
 ## Releasing: preflight and the traps that have actually bitten
 
