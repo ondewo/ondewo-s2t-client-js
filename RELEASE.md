@@ -2,6 +2,17 @@
 
 *****************
 
+## Release ONDEWO S2T Js Client 7.6.0
+
+### Improvements
+
+* Tracking API Version [7.6.0](https://github.com/ondewo/ondewo-s2t-api/releases/tag/7.6.0) ( [Documentation](https://ondewo.github.io/ondewo-s2t-api/) )
+* [[OND236-120]](https://ondewo.atlassian.net/browse/OND236-120) Generated with ondewo-proto-compiler 5.17.0
+  (protoc 35.1, `protoc-gen-grpc-web` 2.1.1). New runtime floors: `grpc-web ^2.1.1` and `google-protobuf ^4.0.3`.
+  grpc-web 2.1.1 limits a response to 4 MB by default; set `maxReceiveMessageSize` to receive more.
+
+*****************
+
 ## Release ONDEWO S2T Js Client 7.5.1
 
 ### Improvements
